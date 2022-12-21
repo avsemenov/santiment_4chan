@@ -3,6 +3,8 @@ import os
 import re
 import html
 import json
+import time
+import datetime
 
 ARCHIVE = 'https://a.4cdn.org/biz/archive.json'
 CATALOG = 'https://a.4cdn.org/biz/catalog.json'
@@ -45,6 +47,22 @@ def get_text(source: dict) -> str:
     return ""
 
 
+def set_catalog_mod_date():
+    with open("config.json", "r") as file:
+        config = json.load(file)
+    config["catalog_modified_date"] = datetime.datetime.now().strftime('%a, %d %b %Y %H:%M:%S') + " GMT"
+    with open("config.json", "w") as file:
+        json.dump(config, file)
+
+
+def set_archive_mod_date():
+    with open("config.json", "r") as file:
+        config = json.load(file)
+    config["archive_modified_date"] = datetime.datetime.now().strftime('%a, %d %b %Y %H:%M:%S') + " GMT"
+    with open("config.json", "w") as file:
+        json.dump(config, file)
+
+
 def get_replies(source: list) -> list:
     replies = []
     if "replies" in source[0]:
@@ -79,9 +97,10 @@ def create_file(no: int, directory: str) -> None:
         json.dump(context, file)
 
 
-def change_comments(no: int, path: str) -> None:
+def change_comments(no: int, path: str, last_modified: str) -> None:
     """
     Adding new comments to file if new where added
+    :param last_modified: date of last time modified, example: Wed, 21 Dec 2022 16:40:00 GMT
     :param no: index of thread
     :param path: directory where file is located
     :return: nothing
@@ -89,11 +108,15 @@ def change_comments(no: int, path: str) -> None:
     path = os.path.join(path, f"{no}.json")
     with open(path, "r") as file:
         thread = json.load(file)
+    if last_modified:
+        last_modified += " GMT"
+    headers = {"If-Modified-Since": last_modified}
     comments = thread["replies"]
     link = fr"https://boards.4channel.org/biz/thread/{no}.json"
-    reply = requests.get(link).json()
-    if not reply:
+    reply = requests.get(link, headers=headers)
+    if not reply or reply.status_code == 304:
         return
+    reply = reply.json()
     reply = reply["posts"][1:]
     local_rep = len(comments)
     real_rep = len(reply)
@@ -114,18 +137,25 @@ def check_catalog() -> None:
     :return: updates files from catalog
     """
     with open("config.json", "r") as file:
-        directory = json.load(file)["folder_path"]
+        config = json.load(file)
+    directory = config["folder_path"]
+    last_modified = config["catalog_modified_date"]
+    set_catalog_mod_date()
     reply = requests.get(CATALOG).json()
+    time.sleep(1)
     if not reply:
         return
     for i in reply:
         for j in i["threads"]:
+            start = time.time()
             no = j["no"]
             path = os.path.join(directory, f"{no}.json")
             if os.path.exists(path):
-                change_comments(no, directory)
+                change_comments(no, directory, last_modified)
             else:
                 create_file(no, directory)
+            sleep = 1 - (time.time() - start) if (1 - (time.time() - start)) > 0 else 0
+            time.sleep(sleep)
 
 
 def archive_rec() -> None:
@@ -136,7 +166,10 @@ def archive_rec() -> None:
     with open("config.json", "r") as file:
         config = json.load(file)
     last_local_thread = config["last_archive_element"]
+    last_modified = config["archive_modified_date"]
+    set_archive_mod_date()
     reply = requests.get(ARCHIVE).json()
+    time.sleep(1)
     if not reply:
         return
     dif = reply
@@ -145,10 +178,13 @@ def archive_rec() -> None:
             dif = reply[i + 1:]
             break
     for i in dif:
+        start = time.time()
         if os.path.exists(os.path.join(config["folder_path"], f"{i}.json")):
-            change_comments(i, config["folder_path"])
+            change_comments(i, config["folder_path"], last_modified)
         else:
             create_file(i, config["folder_path"])
+        sleep = 1 - (time.time() - start) if (1 - (time.time() - start)) > 0 else 0
+        time.sleep(sleep + 0.01)
     config["last_archive_element"] = reply[-1]
     with open("config.json", "w") as file:
         json.dump(config, file)
