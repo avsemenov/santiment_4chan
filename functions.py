@@ -39,6 +39,9 @@ def get_image_link(source: dict) -> str:
 def get_title(source: dict) -> str:
     return source.get("sub", "")
 
+def get_date(source: dict) -> str:
+    dt = source.get("time", "")
+    return datetime.datetime.fromtimestamp(dt).strftime('%a, %d %b %Y %H:%M:%S') + " GMT"
 
 def get_text(source: dict) -> str:
     text = source.get("com")
@@ -89,6 +92,7 @@ def create_file(no: int, directory: str) -> None:
     context = {
         "title": get_title(reply["posts"][0]),
         "text": get_text(reply["posts"][0]),
+        "date": get_date(reply["posts"][0]),
         "img_link": get_image_link(reply["posts"][0]),
         "replies": get_replies(reply["posts"])
     }
