@@ -72,6 +72,7 @@ def get_replies(source: list) -> list:
         for i in source[1:]:
             comment = {
                 "text": get_text(i),
+                "date": get_date(i),
                 "img_link": get_image_link(i)
             }
             replies.append(comment)
@@ -128,6 +129,7 @@ def change_comments(no: int, path: str, last_modified: str) -> None:
         for i in reply[local_rep:]:
             comment = {
                 "text": get_text(i),
+                "date": get_date(i),
                 "img": get_image_link(i)
             }
             comments.append(comment)
